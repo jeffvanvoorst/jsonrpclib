@@ -370,13 +370,17 @@ Server = ServerProxy
 
 class Fault(object):
     # JSON-RPC error class
-    def __init__(self, code=-32000, message='Server error', rpcid=None):
+    def __init__(self, code=-32000, message='Server error', rpcid=None,
+                 data=''):
         self.faultCode = code
         self.faultString = message
+        self.faultData = data
         self.rpcid = rpcid
 
     def error(self):
-        return {'code':self.faultCode, 'message':self.faultString}
+        rv = {'code':self.faultCode, 'message':self.faultString}
+        if(self.faultData): rv['data'] = self.faultData
+        return rv
 
     def response(self, rpcid=None, version=None):
         if not version:
@@ -388,7 +392,10 @@ class Fault(object):
         )
 
     def __repr__(self):
-        return '<Fault %s: %s>' % (self.faultCode, self.faultString)
+        rv = '<Fault %s: %s' % (self.faultCode, self.faultString)
+        if(self.faultData):
+            rv += '\n %s\n' % ('\n '.join(self.faultData.strip().split('|')))
+        return rv + '>'
 
 def random_id(length=8):
     return_id = ''
@@ -431,13 +438,14 @@ class Payload(dict):
             response['error'] = None
         return response
 
-    def error(self, code=-32000, message='Server error.'):
+    def error(self, code=-32000, message='Server error.', data=''):
         error = self.response()
         if self.version >= 2:
             del error['result']
         else:
             error['result'] = None
         error['error'] = {'code':code, 'message':message}
+        if(data): error['error']['data'] = data
         return error
 
 def dumps(params=[], methodname=None, methodresponse=None, 
@@ -463,7 +471,8 @@ def dumps(params=[], methodname=None, methodresponse=None,
     if not encoding:
         encoding = 'utf-8'
     if type(params) is Fault:
-        response = payload.error(params.faultCode, params.faultString)
+        response = payload.error(
+            params.faultCode, params.faultString, params.faultData)
         return jdumps(response, encoding=encoding)
     if type(methodname) not in types.StringTypes and methodresponse != True:
         raise ValueError('Method name must be a string, or methodresponse '+
